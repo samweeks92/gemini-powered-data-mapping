@@ -9,14 +9,14 @@ The lightweight architecture enables parallelising multiple requests to Gemini P
 *   For any single Mapping evaluation, the request is sent to Gemini Pro, where Function Calling is used to ensure a more consistent response back from Gemini, enabling the downstream steps of collating all mapping evaluations and uploading results into BigQuery.
 
 <br>
-![Architecture](./images/job-runner-process.png)
+![Architecture](images/job-runner-process.png)
 <br>
 
 *   For the parallelisation, Cloud Run is used as the runtime enviornment for a small subset of mapping requests, and configured to run a fleet of Instances in a single Service (job-runner), each of which picks a and processes a single mapping request from a job queue.
 *   The Jobs are configured by a seperate Cloud Run Service (job-scheduler), where a configurable input provided by and end user specifies the way in which the total combinations of many:many source:target mapping request possibilities should be split up, then the job-scheduler Service packages up the source/target combinations into seperate lists, saved as objects in a Cloud Storage Bucket (queued-jobs). It is from this Bucket that Jobs are picked and processed by the (job-runner) service
 
 <br>
-![Architecture](./images/job-scheduler-architecture.png)
+![Architecture](images/job-scheduler-architecture.png)
 <br>
 
 ### Project Structure 
