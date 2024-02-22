@@ -1,0 +1,14 @@
+job-runner/__pycache__
+job-runner/.venv
+job-runner/.DS_Store
+job-runner/payloads/__pycache__
+job-runner/components/__pycache__
+
+job-scheduler/node_modules
+job-scheduler/.next
+job-scheduler/.DS_Store
+
+infrastructure/.terraform.lock.hcl
+infrastructure/.terraform/
+
+cloudbuild-iam.sh

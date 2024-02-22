@@ -1,0 +1,11 @@
+steps:
+- name: 'gcr.io/cloud-builders/docker'
+  dir: 'data-mapping-poc/job-scheduler'
+  args: [ 'build', '-t', '$_REGION_-docker.pkg.dev/$_PROJECT_ID_/job-scheduler/job-scheduler', '.' ]
+- name: 'gcr.io/cloud-builders/docker'
+  args: [ 'push', '$_REGION_-docker.pkg.dev/$_PROJECT_ID_/job-scheduler/job-scheduler']
+- name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+  entrypoint: gcloud
+  args: ['run', 'deploy', 'job-scheduler', '--image', '$_REGION_-docker.pkg.dev/$_PROJECT_ID_/job-scheduler/job-scheduler', '--region', '$_REGION_']
+images:
+- $_REGION_-docker.pkg.dev/$_PROJECT_ID_/job-scheduler/job-scheduler

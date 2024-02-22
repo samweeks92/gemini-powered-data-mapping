@@ -1,0 +1,11 @@
+steps:
+    - name: 'hashicorp/terraform:1.0.0'
+      dir: 'data-mapping-poc/infrastructure/'
+      entrypoint: 'sh'
+      args:
+      - '-c'
+      - |-      
+        # Init and Apply Terraform
+        terraform init -backend-config=bucket=$_TF_STATE_BUCKET_NAME_
+        terraform apply -var gitlab-host-connection-name=$_GITLAB_HOST_CONNECTION_NAME_ -var repo-name=$_REPO_NAME_ -var project=$_PROJECT_ID_ -var region=$_REGION_ -var dataset-id=$_DATASET_ID_ -var raw_target_table=$_RAW_TARGET_TABLE_ -var target_table=$_TARGET_TABLE_ -var raw_source_tables=$_RAW_SOURCE_TABLES_ -var raw_source_tables_wildcard=$_RAW_SOURCE_TABLES_WILDCARD_ -var source_table=$_SOURCE_TABLE_ -var mapped_table=$_MAPPED_TABLE_ -auto-approve
+timeout: 3600s
