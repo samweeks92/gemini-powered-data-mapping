@@ -314,6 +314,9 @@ YOU MUST USE THIS FUNCTION."""
     
     if len(df_list_for_upload) == 0:
         print(f"job {objectId}: 0 successfully mapped source fields to upload.")
+        #Copy job to completed bucket             
+        completed_blob = in_progress_jobs_bucket.copy_blob(in_progress_blob, completed_jobs_bucket, objectId) #Copy
+        print(f"Job {objectId}: copied job from in-progress bucket {in_progress_jobs_bucket.name} to completed jobs bucket {completed_jobs_bucket.name}")
     else:
         while upload_retries <= upload_max_retries and not upload_success:
             try:            
@@ -347,15 +350,14 @@ YOU MUST USE THIS FUNCTION."""
                     upload_success = False
             upload_retries += 1
     
-    if upload_success:   
-        #Copy job to successful bucket
-        print(f"Job {objectId}: moving job from in-progress bucket {in_progress_jobs_bucket.name} to completed bucket {completed_jobs_bucket_name}...")                
-        completed_blob = in_progress_jobs_bucket.copy_blob(in_progress_blob, completed_jobs_bucket, objectId) #Copy
-        print(f"Job {objectId}: copied job to completed jobs bucket {completed_jobs_bucket.name}")
-    else:
-        #Copy job to failed bucket              
-        failed_blob = in_progress_jobs_bucket.copy_blob(in_progress_blob, failed_jobs_bucket, objectId) #Copy
-        print(f"Job {objectId}: copied job to failed jobs bucket {failed_jobs_bucket.name}")
+        if upload_success:   
+            #Copy job to completed bucket             
+            completed_blob = in_progress_jobs_bucket.copy_blob(in_progress_blob, completed_jobs_bucket, objectId) #Copy
+            print(f"Job {objectId}: copied job from in-progress bucket {in_progress_jobs_bucket.name} to completed jobs bucket {completed_jobs_bucket.name}")
+        else:
+            #Copy job to failed bucket              
+            failed_blob = in_progress_jobs_bucket.copy_blob(in_progress_blob, failed_jobs_bucket, objectId) #Copy
+            print(f"Job {objectId}: copied job from in-progress bucket {in_progress_jobs_bucket.name} to failed jobs bucket {failed_jobs_bucket.name}")
     
     #Remove job from in progress bucket
     in_progress_blob.delete()
