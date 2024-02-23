@@ -6,6 +6,8 @@ from vertexai.preview import generative_models
 from vertexai.preview.generative_models import GenerativeModel
 import re
 import time
+from proto.marshal.collections import repeated
+from proto.marshal.collections import maps
 
 from flask import Flask, request
 
@@ -141,30 +143,44 @@ a mapping confidence level of 3 for the field with Source_Unique_Ref=160
 a mapping confidence level of 1 for the field with Source_Unique_Ref=1910
 a mapping confidence level of 5 for the field with Source_Unique_Ref=2280
 
-Then this function would be used to set the mapping confidence levels for each of the source fields, where your input parameters would be
-'mapping_confidence_level'=["2", "1", "1", "1", "1", "1", "1", "3", "1", "5"], 'Source_Unique_Ref': [158, 159, 1290, 579, 638, 970, 3317, 160, 1910, 2280]
-And notice that the array index positions for each parameter align with each other to represent the mapping for a particular source field. This is very important.""",
+Then this function would be used to set the mapping confidence levels for each of the source fields, where your input parameter source_field_mapping_confidences would be:
+source_field_mapping_confidences = [
+    {'Source_Unique_Ref':158,'mapping_confidence_level':'2'},
+    {'Source_Unique_Ref':159,'mapping_confidence_level':'2'},
+    {'Source_Unique_Ref':1290,'mapping_confidence_level':'1'},
+    {'Source_Unique_Ref':579,'mapping_confidence_level':'1'},
+    {'Source_Unique_Ref':638,'mapping_confidence_level':'1'},
+    {'Source_Unique_Ref':970,'mapping_confidence_level':'1'},
+    {'Source_Unique_Ref':3317,'mapping_confidence_level':'1'},
+    {'Source_Unique_Ref':160,'mapping_confidence_level':'3'},
+    {'Source_Unique_Ref':1910,'mapping_confidence_level':'1'},
+    {'Source_Unique_Ref':2280,'mapping_confidence_level':'5'}
+]""",
+
     parameters={
         "type": "object",
         "properties": {
-            "Source_Unique_Ref": {
+            "source_field_mapping_confidences": {
                 "type": "array",
-                "description": "An array containing each of the Source_Unique_Ref values for the set of source fields to set a mapping confidence level for.",
-                "items" : {
-                    "type": "integer"
-                },
-                "example": [158, 159, 1290, 579, 638, 970, 3317, 160, 1910, 2280]
-            },
-            "mapping_confidence_level": {
-                "type": "array",
-                "description": "The mapping confidence level for the corresponding source field in the same index in the Source_Unique_Ref parameter. It is very important that the array indexes for mapping_confidence_level align to the Source_Unique_Ref so the mapping confidence levels are aligned to the correct source fields.",
-                "items" : {
-                    "type": "string"
-                },
-                "example": ["2", "1", "1", "1", "1", "1", "1", "3", "1", "5"]
+                "description": "A List of objects where each object in the list contains the source field's Source_Unique_Ref and the mapping_confidence_level for that source field.",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "Source_Unique_Ref": {
+                            "type": "integer",
+                            "description": "The reference ID for the source field."
+                        },
+                        "mapping_confidence_level": {
+                            "type": "string",
+                            "enum": ["1", "2", "3", "4", "5"],
+                            "description": "The confidence level for the mapping (an integer between 1 and 5)."
+                        }
+                    },
+                    "required": ["Source_Unique_Ref", "mapping_confidence_level"]
+                }
             },
         },
-        "required": ["Source_Unique_Ref", "mapping_confidence_level"]
+        "required": ["source_field_mapping_confidences"],
     },
 )
 
@@ -239,20 +255,20 @@ YOU MUST USE THIS FUNCTION."""
                         raise Exception("GEMINI DID NOT USE FUNCTION CALL")
                     else:
                         function_call_json = parse_function_call(model_response.candidates[0].content.parts[0].function_call)
-                        attributes_dict = function_call_json["attributes"]
+                        attributes = function_call_json["attributes"]
                         
-                        con1 = len(attributes_dict['mapping_confidence_level']) != len(attributes_dict['Source_Unique_Ref'])
-                        if (con1):
-                            raise Exception(f"GEMINI FUNCTION RESPONSE OBJECTS ARE NOT OF EQUAL LENGTH: fields:{field_count} mappings:{len(attributes_dict['mapping_confidence_level'])} rows:{len(attributes_dict['Source_Unique_Ref'])}")
-                        
-                        con2 = len(attributes_dict['mapping_confidence_level']) != field_count
-                        if con2:
-                            raise Exception(f"NUMBER OF FIELDS MAPPED BY GEMINI IS NOT EQUAL TO NUMBER OF INPUT FIELDS. fields:{field_count} mappings:{len(attributes_dict['mapping_confidence_level'])} rows:{len(attributes_dict['Source_Unique_Ref'])}")
+                        if len(attributes['source_field_mapping_confidences']) != field_count:
+                            raise Exception(f"NUMBER OF FIELDS MAPPED BY GEMINI IS NOT EQUAL TO NUMBER OF INPUT FIELDS. fields:{field_count} mappings:{len(attributes['source_field_mapping_confidences'])}")
 
-                        for l, Source_Unique_Ref in enumerate(attributes_dict['Source_Unique_Ref']):
-                            source_df_row = source_df[source_df['Source_Unique_Ref']==int(Source_Unique_Ref)]
-                            confidence_level = attributes_dict['mapping_confidence_level'][l]
-                            mapping_output = merge_dataframes_and_string(target_df_row, source_df_row, confidence_level)
+                        for l, attribute in enumerate(attributes['source_field_mapping_confidences']):
+                            mapping_dict = recurse_proto_marshal_to_dict(attribute)
+                            
+                            Source_Unique_Ref_int = int(mapping_dict['Source_Unique_Ref'])
+                            source_df_row = source_df[source_df['Source_Unique_Ref']==Source_Unique_Ref_int]
+
+                            mapping_confidence_level_int = int(mapping_dict['mapping_confidence_level'])
+                            
+                            mapping_output = merge_dataframes_and_string(target_df_row, source_df_row, mapping_confidence_level_int)
                             df_list_for_upload.append(mapping_output)
 
                         succeeded_source_string_groups.append({'name': f"target-row-{target_row}-source-groups-{j+source_group_start}-{j+source_group_start}", 'content': unmapped_source_string_group})
@@ -400,6 +416,32 @@ def merge_dataframes_and_string(target_df_row, source_df_row, confidence_level):
 
     return final_df
 
+def recurse_proto_repeated_composite(repeated_object):
+    repeated_list = []
+    for item in repeated_object:
+        if isinstance(item, repeated.RepeatedComposite):
+            item = recurse_proto_repeated_composite(item)
+            repeated_list.append(item)
+        elif isinstance(item, maps.MapComposite):
+            item = recurse_proto_marshal_to_dict(item)
+            repeated_list.append(item)
+        else:
+            repeated_list.append(item)
+
+    return repeated_list
+
+def recurse_proto_marshal_to_dict(marshal_object):
+    new_dict = {}
+    for k, v in marshal_object.items():
+      if not v:
+        continue
+      elif isinstance(v, maps.MapComposite):
+          v = recurse_proto_marshal_to_dict(v)
+      elif isinstance(v, repeated.RepeatedComposite):
+          v = recurse_proto_repeated_composite(v)
+      new_dict[k] = v
+
+    return new_dict
 
 
 
@@ -537,3 +579,167 @@ def merge_dataframes_and_string(target_df_row, source_df_row, confidence_level):
 # You should decide on a mapping confidence level for each of the source fields, then set the mapping confidence level for each field using and use the value for Source_Unique_Ref for each source field to reference it with its corresponding mapping confidence level.
 # Then YOU MUST USE the available function set_source_field_mapping_confidence_levels in the set_source_field_mapping_confidence_levels_tool to set your mappings confidence level for each of the source fields.
 # YOU MUST USE THIS FUNCTION."""
+
+######################
+# BELOW IS FOR RUN 3 #
+######################
+
+
+#         prompt = f"""You are Data Engineer working for an insurance company. As part of a data migration project you need to assist with mapping fields in a source data schema fields in a target data schema.
+# The source and destination schemas are both complex and nested.
+# You will be shown 1 field in the target schema and multiple fields in the source schema.
+# The mappings will not be exactly one to one: Instead of providing a one-to-one mapping for a single source schema to a single destiation schema, your job is to provide a mapping confidence level for how well you think each of the fields for the source schemas you see will map to the field for the target schema.
+
+# The field from the target schema is described here:
+# {target_string_row}
+
+# The fields taken from the source schema are described here:
+# {unmapped_source_string_group}
+
+# Based on your knowledge of the insurance industry, pets, pet insurance, you will provide a mapping confidence level for how well each of the source fields map to the target field.
+# You must think very carefully about the mapping confidence level you apply for each source field, as it will be used in later process steps to implement the automated data migration pipelines, so any innacuracies lead to very costly errors.
+# The confidence level is a number between 1 and 5 where:
+# 1 means there is a no chance that the fields could be a match
+# 2 means there is a small chance that the fields colud be a match
+# 3 means there is a good chance that the fields could be a match
+# 4 means there is a very good chance that the fields could be a match
+# 5 means there is a very very good chance that the fields could be a match
+
+# You should decide on a mapping confidence level for each of the source fields, then set the mapping confidence level for each field using and use the value for Source_Unique_Ref for each source field to reference it with its corresponding mapping confidence level.
+# Then YOU MUST USE the available function set_source_field_mapping_confidence_levels in the set_source_field_mapping_confidence_levels_tool to set your mappings confidence level for each of the source fields.
+# YOU MUST USE THIS FUNCTION."""
+
+#     set_source_field_mapping_confidence_levels = generative_models.FunctionDeclaration(
+#     name="set_source_field_mapping_confidence_levels",
+#     description="""Sets the mapping confidence values for each source field for a given target field.
+
+# Here is a general example to help you understand how to use the set_source_field_mapping_confidences_tool correctly. This is only an example to show the source and target field structures.:
+
+# Assuming you had previously decided on the following mapping confidence levels (but it is important that you come up with your own values for mapping condifence level rather than specifically using these values):
+# a mapping confidence level of 2 for the field with Source_Unique_Ref=158
+# a mapping confidence level of 1 for the field with Source_Unique_Ref=159
+# a mapping confidence level of 1 for the field with Source_Unique_Ref=1290
+# a mapping confidence level of 1 for the field with Source_Unique_Ref=579
+# a mapping confidence level of 1 for the field with Source_Unique_Ref=638
+# a mapping confidence level of 1 for the field with Source_Unique_Ref=970
+# a mapping confidence level of 1 for the field with Source_Unique_Ref=3317
+# a mapping confidence level of 3 for the field with Source_Unique_Ref=160
+# a mapping confidence level of 1 for the field with Source_Unique_Ref=1910
+# a mapping confidence level of 5 for the field with Source_Unique_Ref=2280
+
+# Then this function would be used to set the mapping confidence levels for each of the source fields, where your input parameters would be
+# 'mapping_confidence_level'=["2", "1", "1", "1", "1", "1", "1", "3", "1", "5"], 'Source_Unique_Ref': [158, 159, 1290, 579, 638, 970, 3317, 160, 1910, 2280]
+# And notice that the array index positions for each parameter align with each other to represent the mapping for a particular source field. This is very important.""",
+#     parameters={
+#         "type": "object",
+#         "properties": {
+#             "Source_Unique_Ref": {
+#                 "type": "array",
+#                 "description": "An array containing each of the Source_Unique_Ref values for the set of source fields to set a mapping confidence level for.",
+#                 "items" : {
+#                     "type": "integer"
+#                 },
+#                 "example": [158, 159, 1290, 579, 638, 970, 3317, 160, 1910, 2280]
+#             },
+#             "mapping_confidence_level": {
+#                 "type": "array",
+#                 "description": "The mapping confidence level for the corresponding source field in the same index in the Source_Unique_Ref parameter. It is very important that the array indexes for mapping_confidence_level align to the Source_Unique_Ref so the mapping confidence levels are aligned to the correct source fields.",
+#                 "items" : {
+#                     "type": "string"
+#                 },
+#                 "example": ["2", "1", "1", "1", "1", "1", "1", "3", "1", "5"]
+#             },
+#         },
+#         "required": ["Source_Unique_Ref", "mapping_confidence_level"]
+#     },
+# )
+
+
+######################
+# BELOW IS FOR RUN 4 #
+######################
+
+#         prompt = f"""You are Data Engineer working for an insurance company. As part of a data migration project you need to assist with mapping fields in a source data schema fields in a target data schema.
+# The source and destination schemas are both complex and nested.
+# You will be shown 1 field in the target schema and multiple fields in the source schema.
+# The mappings will not be exactly one to one: Instead of providing a one-to-one mapping for a single source schema to a single destiation schema, your job is to provide a mapping confidence level for how well you think each of the fields for the source schemas you see will map to the field for the target schema.
+
+# The field from the target schema is described here:
+# {target_string_row}
+
+# The fields taken from the source schema are described here:
+# {unmapped_source_string_group}
+
+# Based on your knowledge of the insurance industry, pets, pet insurance, you will provide a mapping confidence level for how well each of the source fields map to the target field.
+# You must think very carefully about the mapping confidence level you apply for each source field, as it will be used in later process steps to implement the automated data migration pipelines, so any innacuracies lead to very costly errors.
+# The confidence level is a number between 1 and 5 where:
+# 1 means there is a no chance that the fields could be a match
+# 2 means there is a small chance that the fields colud be a match
+# 3 means there is a good chance that the fields could be a match
+# 4 means there is a very good chance that the fields could be a match
+# 5 means there is a very very good chance that the fields could be a match
+
+# You should decide on a mapping confidence level for each of the source fields, then set the mapping confidence level for each field using and use the value for Source_Unique_Ref for each source field to reference it with its corresponding mapping confidence level.
+# Then YOU MUST USE the available function set_source_field_mapping_confidence_levels in the set_source_field_mapping_confidence_levels_tool to set your mappings confidence level for each of the source fields.
+# YOU MUST USE THIS FUNCTION."""
+
+
+
+# set_source_field_mapping_confidence_levels = generative_models.FunctionDeclaration(
+#     name="set_source_field_mapping_confidence_levels",
+#     description="""Sets the mapping confidence values for each source field for a given target field.
+
+# Here is a general example to help you understand how to use the set_source_field_mapping_confidences_tool correctly. This is only an example to show the source and target field structures.:
+
+# Assuming you had previously decided on the following mapping confidence levels (but it is important that you come up with your own values for mapping condifence level rather than specifically using these values):
+# a mapping confidence level of 2 for the field with Source_Unique_Ref=158
+# a mapping confidence level of 1 for the field with Source_Unique_Ref=159
+# a mapping confidence level of 1 for the field with Source_Unique_Ref=1290
+# a mapping confidence level of 1 for the field with Source_Unique_Ref=579
+# a mapping confidence level of 1 for the field with Source_Unique_Ref=638
+# a mapping confidence level of 1 for the field with Source_Unique_Ref=970
+# a mapping confidence level of 1 for the field with Source_Unique_Ref=3317
+# a mapping confidence level of 3 for the field with Source_Unique_Ref=160
+# a mapping confidence level of 1 for the field with Source_Unique_Ref=1910
+# a mapping confidence level of 5 for the field with Source_Unique_Ref=2280
+
+# Then this function would be used to set the mapping confidence levels for each of the source fields, where your input parameter source_field_mapping_confidences would be:
+# source_field_mapping_confidences = [
+#     {'Source_Unique_Ref':158,'mapping_confidence_level':'2'},
+#     {'Source_Unique_Ref':159,'mapping_confidence_level':'2'},
+#     {'Source_Unique_Ref':1290,'mapping_confidence_level':'1'},
+#     {'Source_Unique_Ref':579,'mapping_confidence_level':'1'},
+#     {'Source_Unique_Ref':638,'mapping_confidence_level':'1'},
+#     {'Source_Unique_Ref':970,'mapping_confidence_level':'1'},
+#     {'Source_Unique_Ref':3317,'mapping_confidence_level':'1'},
+#     {'Source_Unique_Ref':160,'mapping_confidence_level':'3'},
+#     {'Source_Unique_Ref':1910,'mapping_confidence_level':'1'},
+#     {'Source_Unique_Ref':2280,'mapping_confidence_level':'5'}
+# ]""",
+
+#     parameters={
+#         "type": "object",
+#         "properties": {
+#             "source_field_mapping_confidences": {
+#                 "type": "array",
+#                 "description": "A List of objects where each object in the list contains the source field's Source_Unique_Ref and the mapping_confidence_level for that source field.",
+#                 "items": {
+#                     "type": "object",
+#                     "properties": {
+#                         "Source_Unique_Ref": {
+#                             "type": "integer",
+#                             "description": "The reference ID for the source field."
+#                         },
+#                         "mapping_confidence_level": {
+#                             "type": "string",
+#                             "enum": ["1", "2", "3", "4", "5"],
+#                             "description": "The confidence level for the mapping (an integer between 1 and 5)."
+#                         }
+#                     },
+#                     "required": ["Source_Unique_Ref", "mapping_confidence_level"]
+#                 }
+#             },
+#         },
+#         "required": ["source_field_mapping_confidences"],
+#     },
+# )
