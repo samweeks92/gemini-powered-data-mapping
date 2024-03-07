@@ -1,6 +1,8 @@
 ## Infrastructure
 
-This directory provides for the deployment of the infrastructure for the gemini powered data mapping project
+### Background
+
+This directory provides for the deployment of the infrastructure for the market data chat demo Project
 
 The deployment of the infrastructure is managed by Terraform and it uses a single Project.
 

@@ -2,19 +2,20 @@
 
 This project provides a Proof of Concept for using Gemini Pro to assist with mapping source schema fields to target schema fields in the situation of a data migration event. 
 
-**Please note that this is A DEMO, showing the art of the possible under very time constrained conditions. It has been built for speed and not for reliability, performance or any other considerations required for a robust production system. Only use it as inspiration to understand what sorts of architectures are possible. Always start from scratch with your own implementation.**
-
 The lightweight architecture enables parallelising multiple requests to Gemini Pro, enabling either one:one or many:one source:target mapping evaluations.
 
 *   For any single Mapping evaluation, the request is sent to Gemini Pro, where Function Calling is used to ensure a more consistent response back from Gemini, enabling the downstream steps of collating all mapping evaluations and uploading results into BigQuery.
 
+<br>
 ![Architecture](./images/job-runner-process.png)
+<br>
 
 *   For the parallelisation, Cloud Run is used as the runtime enviornment for a small subset of mapping requests, and configured to run a fleet of Instances in a single Service (job-runner), each of which picks a and processes a single mapping request from a job queue.
 *   The Jobs are configured by a seperate Cloud Run Service (job-scheduler), where a configurable input provided by and end user specifies the way in which the total combinations of many:many source:target mapping request possibilities should be split up, then the job-scheduler Service packages up the source/target combinations into seperate lists, saved as objects in a Cloud Storage Bucket (queued-jobs). It is from this Bucket that Jobs are picked and processed by the (job-runner) service
 
-
+<br>
 ![Architecture](./images/job-scheduler-architecture.png)
+<br>
 
 ### Project Structure 
 
@@ -27,16 +28,7 @@ The lightweight architecture enables parallelising multiple requests to Gemini P
 
 <br>
 
-### Experimentation
-
-Left in the repo is [experimentation.ipynb](./experimentation.ipynb) used for very early experimentation and testing. Although this code is not up to date, it may still be useful for testing purposes by users of this repo. Please be aware that this code does not represent the most up to date versions of the project, and instead users should refer to [job-scheduler/main.py](./job-scheduler/main.py) and [job-runner/main.py](./job-runner/main.py) and adjust the experimenting notebook appropriately.
-
-
 ### Infrastructure Deployment
-
-
-
-
 
 Terraform will build out the architecture, running the Terraform from Cloud Build. Cloud Build Triggers will be created later in the readme and through Terraform so any code pushed to your cloned repo (on main branch by defulat) will trigger the Terraform to be checked and any changes to be rolled out.
 
@@ -49,18 +41,19 @@ Terraform initially creates the job-runner and job-scheduler Cloud Run Services 
 Edit the below with your own details:
 
 ```
-PROJECT_ID=<YOUR-PROJECT-NUMBER>
+PROJECT_ID=ai-sandbox-sw
 REGION=us-central1
+GITLAB_HOST_CONNECTION_NAME=ai-sandbox-sw #THIS IS THE NAME OF THE CONNECTION CREATED IN STEP 0.
+REPO_NAME=ai-sandbox-sw #THIS IS THE NAME OF THE GITLAB REPO CONNECTED VIA STEP 0.
+DATASET_ID=mstudy
+RAW_TARGET_TABLE=target2
+TARGET_TABLE=target2_ordered
+RAW_SOURCE_TABLES=source-uipetmis:source-uispet
+RAW_SOURCE_TABLES_WILDCARD=source-*
+SOURCE_TABLE=source_ordered
+MAPPED_TABLE=mapped-results-run4
 TF_STATE_BUCKET_NAME=$PROJECT_ID-tf-state
-GITLAB_HOST_CONNECTION_NAME=<THIS IS THE NAME OF THE CONNECTION CREATED IN STEP 0>
-REPO_NAME=<THIS IS THE NAME OF THE GITLAB REPO CONNECTED VIA STEP 0>
-DATASET_ID=<BigQuery Dataset ID TO HOLD THE DATA>
-RAW_TARGET_TABLE=<TABLE NAME FOR EXISTING INITIAL TARGET DATA>
-TARGET_TABLE=<CHOSEN NAME FOR NEW TABLE FOR TARGET DATA>
-RAW_SOURCE_TABLES=<COLON SEPERATED TABLE NAMES FOR EXISTING INITIAL SOURCE DATA - e.g. source-uipetmis:source-uispet>
-RAW_SOURCE_TABLES_WILDCARD=<WILDCARD FOR SOURCE TABLES - e.g. source-* >
-SOURCE_TABLE=<CHOSEN NAME FOR NEW TABLE FOR SOURCE DATA>
-MAPPED_TABLE=<CHOSEN NAME FOR NEW TABLE FOR MAPPED DATA>
+
 ```
 
 3. Enable APIs

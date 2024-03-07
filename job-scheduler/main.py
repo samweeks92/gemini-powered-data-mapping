@@ -346,11 +346,20 @@ def index():
         print(f"{count} x groups with length {length}")
 
 
+    def dataframe_to_custom_source_string(df):
+
+        output = ""  # Header with column names
+
+        for _, row in df.iterrows():
+            row_string = f"source_field: {row['Source_SchemaName']}.{row['Source_TableName']}.{row['Source_Column_Name']}; data_type: {row['Source_Data_type']}; source_field_unique_ref: {row['Source_Unique_Ref']}"
+            output += f"{row_string}\n"
+
+        return output
 
     print("\nconverting dataframe groupings to string groupings...")
     combined_source_string_groups = []
     for path, combined_source_df_group in combined_source_df_groups.items():
-        combined_source_string_group = dataframe_to_string(combined_source_df_group)
+        combined_source_string_group = dataframe_to_custom_source_string(combined_source_df_group)
         combined_source_string_groups.append(combined_source_string_group)
     print(f"...Complete. Number of combined source schema string groupings: {len(combined_source_string_groups)}\n")
 
